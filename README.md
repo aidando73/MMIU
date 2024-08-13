@@ -5,6 +5,7 @@
 # MMIU
 
 <p align="left">
+  <a href="#🚀-quick-start"><b>Quick Start</b></a> |
   <a href="https://mmiu-bench.github.io/"><b>HomePage</b></a> |
   <a href="https://arxiv.org/abs/2408.02718"><b>arXiv</b></a> |
   <a href="https://huggingface.co/datasets/FanqingM/MMIU-Benchmark"><b>Dataset</b></a> |
@@ -21,7 +22,9 @@ This repository is the official implementation of [MMIU](https://arxiv.org/abs/2
 
 ## 💡 News
 
--`2024/08/08`: We have released the dataset at https://huggingface.co/datasets/FanqingM/MMIU-Benchmark 🔥🔥🔥
+- `2024/08/13`: We have released the codes. 
+
+- `2024/08/08`: We have released the dataset at https://huggingface.co/datasets/FanqingM/MMIU-Benchmark 🔥🔥🔥
 
 - `2024/08/05`: The datasets and codes are coming soon! 🔥🔥🔥
 
@@ -86,6 +89,55 @@ Multimodal Multi-image Understanding (MMIU) benchmark, a comprehensive evaluatio
 
 
 
+## 🚀 Quick Start
+
+Here, we mainly use the VLMEvalKit framework for testing, with some separate tests as well. Specifically, for multi-image models, we include the following models:
+
+**transformers == 33.0**
+
+- `XComposer2`
+- `XComposer2_1.8b`
+- `qwen_base`
+- `idefics_9b_instruct`
+- `qwen_chat`
+- `flamingov2`
+
+**transformers == 37.0**
+- `deepseek_vl_1.3b`
+- `deepseek_vl_7b`
+
+**transformers == 40.0**
+
+- `idefics2_8b`
+
+For single-image models, we include the following:
+
+**transformers == 33.0**
+
+- `sharecaptioner`
+- `monkey-chat`
+
+**transformers == 37.0**
+
+- `sharegpt4v_7b`
+- `llava_v1.5_7b`
+- `glm-4v-9b`
+
+**transformers == 40.0**
+
+- `llava_next_vicuna_7b`
+- `MiniCPM-Llama3-V-2_5`
+
+We use the VLMEvalKit framework for testing. You can refer to the code in `VLMEvalKit/test_models.py`. Additionally, for closed-source models, please replace the following part of the code by following the example here:
+
+```python
+response = model.generate(tmp) # tmp = image_paths + [question]
+```
+
+For other open-source models, we have provided reference code for `Mantis` and `InternVL1.5-chat`. For `LLava-Interleave`, please refer to the original repository.
+
+
+
 
 ## 💐 Acknowledgement
 
@@ -101,4 +153,15 @@ If you have any questions, feel free to contact Fanqing Meng with mengfanqing33@
 
 ## 🖊️ Citation 
 If you feel MMIU useful in your project or research, please kindly use the following BibTeX entry to cite our paper. Thanks!
+
+```
+@article{meng2024mmiu,
+  title={MMIU: Multimodal Multi-image Understanding for Evaluating Large Vision-Language Models},
+  author={Meng, Fanqing and Wang, Jin and Li, Chuanhao and Lu, Quanfeng and Tian, Hao and Liao, Jiaqi and Zhu, Xizhou and Dai, Jifeng and Qiao, Yu and Luo, Ping and others},
+  journal={arXiv preprint arXiv:2408.02718},
+  year={2024}
+}
+```
+
+
 
