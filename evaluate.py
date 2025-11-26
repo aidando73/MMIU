@@ -9,9 +9,12 @@ import re
 def remove_punctuation(text):
     return re.sub(r'^[.,()]+|[.,()]+$', '', text)
 
+base_url = 'https://api.fireworks.ai/inference/'
+api_key = os.getenv('FIREWORKS_API_KEY', None)
+
 client = OpenAI(
-    base_url='xx',
-    api_key='xx',
+    base_url=base_url,
+    api_key=api_key,
 )
 
 def build_prompt(question, options, prediction):
@@ -36,8 +39,8 @@ def process_data(args):
     client = OpenAI(
     # base_url='https://kkkc.net/v1',
     # api_key='sk-YJaHfazVSf2WDkAl1bAdE17bF3Ae4923Ba888293B31d13C4',
-    base_url='xx',
-    api_key='xx',
+    base_url=base_url,
+    api_key=api_key,
     )
 
     options = data_tmp['options']
@@ -99,8 +102,8 @@ def main():
     # modelnames = ['Gemini','Gemini1.0']
     # modelnames = ['GPT4o','Gemini','Gemini1.0']
     # modelnames = ['Llava-interleave']
-    modelnames = ['Llava-interleave', 'qwen_chat', 'XComposer2', 'deepseek_vl_7b', 'qwen_base', 'XComposer2_1.8b', 'flamingov2', 'deepseek_vl_1.3b', 'internvl1.5-chat', 'idefics2_8b', 'Mantis', 'idefics_9b_instruct']
-    directorys = ['xx','xx']
+    modelnames = ['qwen3-vl']
+    directorys = ['./results']
    
     for directory in directorys:
         tasknames = os.listdir(directory)
