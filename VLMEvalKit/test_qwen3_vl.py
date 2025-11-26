@@ -36,12 +36,22 @@ def encode_image(image_path):
         print(f"Error encoding image {image_path}: {e}")
         return None
 
-def call_qwen3_vl(image_paths, question, model_name="qwen3-vl"):
+def call_qwen3_vl(image_paths, question, model_name="qwen3-vl", interleave_text=False):
     """Call qwen3-vl via OpenAI-compatible API."""
     content = []
     
-    # Add images
-    for image_path in image_paths:
+    # Random text snippets to interleave between images
+    interleave_texts = [
+        "Here is image",
+        "This image shows",
+        "Looking at this image",
+        "In this image we can see",
+        "This picture contains",
+        "Image",
+    ]
+    
+    # Add images (with optional interleaved text)
+    for i, image_path in enumerate(image_paths):
         if not os.path.exists(image_path):
             print(f"Image not found: {image_path}")
             return 'image error'
@@ -49,6 +59,14 @@ def call_qwen3_vl(image_paths, question, model_name="qwen3-vl"):
         base64_image = encode_image(image_path)
         if base64_image is None:
             return 'image error'
+        
+        # Add interleaved text before each image (except the first)
+        if interleave_text and i > 0:
+            interleave_text_snippet = random.choice(interleave_texts) + f" {i+1}."
+            content.append({
+                "type": "text",
+                "text": interleave_text_snippet
+            })
         
         content.append({
             "type": "image_url",
@@ -92,6 +110,7 @@ parser.add_argument('--tasks', type=str, nargs='+', default=None, help='Filter b
 parser.add_argument('--seed', type=int, default=42, help='Random seed for sampling')
 parser.add_argument('--workers', type=int, default=1, help='Number of parallel workers (default: 1)')
 parser.add_argument('--output-dir', type=str, default='../results', help='Output directory for results (default: ../results)')
+parser.add_argument('--interleave-random-text', action='store_true', help='Interleave random text snippets between images (just for testing)')
 args = parser.parse_args()
 
 json_path = args.json_path
@@ -125,12 +144,16 @@ elif args.limit:
     data_all = data_all[:args.limit]
     print(f"Limited to first {len(data_all)} rows")
 
+# Seed random for interleaved text (if enabled)
+if args.interleave_random_text:
+    random.seed(args.seed)
+
 if original_count != len(data_all):
     print(f"Processing {len(data_all)} rows (out of {original_count} total)")
 
 def process_single_item(args_tuple):
     """Process a single task_data item. Used for parallel processing."""
-    task_data, model_name, tasks_exist = args_tuple
+    task_data, model_name, tasks_exist, interleave_random_text = args_tuple
     
     context = task_data["context"]
     question = task_data["question"]
@@ -157,7 +180,7 @@ def process_single_item(args_tuple):
             question_formatted = context + '\n' + question
         question_formatted = question_formatted + '\nPlease answer the option directly like A,B,C,D...'
         
-        response = call_qwen3_vl(tmp, question_formatted, model_name=model_name)
+        response = call_qwen3_vl(tmp, question_formatted, model_name=model_name, interleave_text=interleave_random_text)
         task_data[model_name] = response
         print(f"{model_name}, {task_data.get('task', 'unknown')}, {len(tmp)}: {response}")
     except Exception as e:
@@ -171,8 +194,10 @@ def process_single_item(args_tuple):
 # Process items (sequentially or in parallel)
 if args.workers > 1:
     print(f"Processing {len(data_all)} items with {args.workers} parallel workers...")
+    if args.interleave_random_text:
+        print("Interleaving random text between images enabled")
     # Create argument tuples for each item
-    process_args = [(task_data, model_name, tasks_exist) for task_data in data_all]
+    process_args = [(task_data, model_name, tasks_exist, args.interleave_random_text) for task_data in data_all]
     
     # Process in parallel with progress bar
     with Pool(processes=args.workers) as pool:
@@ -183,8 +208,10 @@ if args.workers > 1:
         ))
 else:
     print(f"Processing {len(data_all)} items sequentially...")
+    if args.interleave_random_text:
+        print("Interleaving random text between images enabled")
     processed_data = [
-        process_single_item((task_data, model_name, tasks_exist))
+        process_single_item((task_data, model_name, tasks_exist, args.interleave_random_text))
         for task_data in tqdm(data_all, desc="Processing")
     ]
 
