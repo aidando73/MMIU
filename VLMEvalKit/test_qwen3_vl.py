@@ -1,22 +1,17 @@
 import os
 import json
 import base64
+import argparse
+import random
+from multiprocessing import Pool
+from tqdm import tqdm
 from openai import OpenAI
 from PIL import Image
 import io
 
 # Configure API client
-base_url = os.getenv('OPENAI_API_BASE', 'https://api.fireworks.ai/inference/v1/chat/completions')
+base_url = os.getenv('OPENAI_API_BASE', 'https://api.fireworks.ai/inference/v1')
 api_key = os.getenv('FIREWORKS_API_KEY', None)
-
-# If base_url doesn't include /v1/chat/completions, add it
-if base_url and not base_url.endswith('/v1/chat/completions') and not base_url.endswith('/v1/chat/completions/'):
-    if base_url.endswith('/v1'):
-        base_url = base_url + '/chat/completions'
-    elif not base_url.endswith('/'):
-        base_url = base_url + '/v1/chat/completions'
-    else:
-        base_url = base_url + 'v1/chat/completions'
 
 client = OpenAI(
     base_url=base_url,
@@ -89,14 +84,24 @@ def call_qwen3_vl(image_paths, question, model_name="qwen3-vl"):
         print(f"Model error: {e}")
         return 'model error'
 
-json_path = 'all.json'
+parser = argparse.ArgumentParser(description='Run Qwen3-VL inference on MMIU dataset')
+parser.add_argument('--json_path', type=str, default='all.json', help='Path to all.json file')
+parser.add_argument('--limit', type=int, default=None, help='Limit to first N rows')
+parser.add_argument('--sample', type=int, default=None, help='Random sample of N rows')
+parser.add_argument('--tasks', type=str, nargs='+', default=None, help='Filter by specific task names')
+parser.add_argument('--seed', type=int, default=42, help='Random seed for sampling')
+parser.add_argument('--workers', type=int, default=1, help='Number of parallel workers (default: 1)')
+parser.add_argument('--output-dir', type=str, default='../results', help='Output directory for results (default: ../results)')
+args = parser.parse_args()
+
+json_path = args.json_path
 
 tasks_exist = ['person_reid', 'multiple_image_captioning', 'spot_the_similarity', 'face_retrieval', 'sketch2image_retrieval', 'handwritten_retrieval', 'spot_the_diff', 'image2image_retrieval', 'vehicle_retrieval', 'text2image_retrieval',
 'general_action_recognition', 'video_captioning', 'next_img_prediction', 'temporal_ordering', 'meme_vedio_understanding', 'action_quality_assessment', 'temporal_localization', 'mevis',
 'ravens_progressive_matrices', 'threed_indoor_recognition', 'point_tracking', 'threed_cad_recognition', 'single_object_tracking']
 
 # Model name - can be overridden via environment variable
-model_name = os.getenv('QWEN3_VL_MODEL', 'qwen3-vl')
+model_name = os.getenv('MODEL', 'qwen3-vl')
 
 if not os.path.exists(json_path):
     print(f"Error: {json_path} not found!")
@@ -106,10 +111,27 @@ if not os.path.exists(json_path):
 with open(json_path, 'r') as f:
     data_all = json.load(f)
 
-# Organize results by task
-results_by_task = {}
+# Apply filters
+original_count = len(data_all)
+if args.tasks:
+    data_all = [d for d in data_all if d.get('task') in args.tasks]
+    print(f"Filtered to {len(data_all)} rows matching tasks: {args.tasks}")
 
-for task_data in data_all:
+if args.sample:
+    random.seed(args.seed)
+    data_all = random.sample(data_all, min(args.sample, len(data_all)))
+    print(f"Sampled {len(data_all)} rows (seed={args.seed})")
+elif args.limit:
+    data_all = data_all[:args.limit]
+    print(f"Limited to first {len(data_all)} rows")
+
+if original_count != len(data_all):
+    print(f"Processing {len(data_all)} rows (out of {original_count} total)")
+
+def process_single_item(args_tuple):
+    """Process a single task_data item. Used for parallel processing."""
+    task_data, model_name, tasks_exist = args_tuple
+    
     context = task_data["context"]
     question = task_data["question"]
     
@@ -126,11 +148,7 @@ for task_data in data_all:
         response = 'image none'
         task_data[model_name] = response
         print(f"{model_name}, {task_data.get('task', 'unknown')}, {len(tmp)}: {response}")
-        task_name = task_data.get('task', 'unknown')
-        if task_name not in results_by_task:
-            results_by_task[task_name] = []
-        results_by_task[task_name].append(task_data)
-        continue
+        return task_data
     
     try:
         if task_data['task'] in tasks_exist:
@@ -148,19 +166,47 @@ for task_data in data_all:
         print(f"{model_name}, {task_data.get('task', 'unknown')}, {len(tmp)}: {response}")
         print(f"Exception: {e}")
     
+    return task_data
+
+# Process items (sequentially or in parallel)
+if args.workers > 1:
+    print(f"Processing {len(data_all)} items with {args.workers} parallel workers...")
+    # Create argument tuples for each item
+    process_args = [(task_data, model_name, tasks_exist) for task_data in data_all]
+    
+    # Process in parallel with progress bar
+    with Pool(processes=args.workers) as pool:
+        processed_data = list(tqdm(
+            pool.imap(process_single_item, process_args),
+            total=len(process_args),
+            desc="Processing"
+        ))
+else:
+    print(f"Processing {len(data_all)} items sequentially...")
+    processed_data = [
+        process_single_item((task_data, model_name, tasks_exist))
+        for task_data in tqdm(data_all, desc="Processing")
+    ]
+
+# Organize results by task
+results_by_task = {}
+for task_data in processed_data:
     task_name = task_data.get('task', 'unknown')
     if task_name not in results_by_task:
         results_by_task[task_name] = []
     results_by_task[task_name].append(task_data)
 
 # Save results organized by task
-base_output_dir = os.path.join('../results')
+base_output_dir = os.path.abspath(args.output_dir)  # Resolve to absolute path to avoid issues
 if not os.path.exists(base_output_dir):
     os.makedirs(base_output_dir)
 
+# Extract basename for directory structure (in case model_name is a full path)
+model_dir_name = os.path.basename(model_name) if os.path.sep in model_name else model_name
+
 for task_name, task_results in results_by_task.items():
     task_dir = os.path.join(base_output_dir, task_name)
-    model_dir = os.path.join(task_dir, model_name)
+    model_dir = os.path.join(task_dir, model_dir_name)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
     
@@ -169,5 +215,5 @@ for task_name, task_results in results_by_task.items():
         json.dump(task_results, f)
     print(f"Saved {len(task_results)} results for task '{task_name}' to {output_path}")
 
-print(f"\nAll results saved to: {base_output_dir}")
+print(f"\nAll results saved to: {os.path.abspath(base_output_dir)}")
 
